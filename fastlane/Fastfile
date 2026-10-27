@@ -1,0 +1,80 @@
+require "plist"
+
+default_platform(:ios)
+
+# Repository root (fastlane runs lanes from inside ./fastlane).
+ROOT = ENV["GITHUB_WORKSPACE"] || File.expand_path("..", Dir.pwd)
+
+platform :ios do
+  desc "Build a signed App Store IPA and upload it to TestFlight"
+  desc "Required env: APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64,"
+  desc "IOS_DIST_CERT_PATH (.p12), IOS_DIST_CERT_PASSWORD. Optional: IOS_BUNDLE_ID."
+  lane :beta do
+    team_id = ENV.fetch("APPLE_TEAM_ID")
+    bundle_id = ENV.fetch("IOS_BUNDLE_ID", "com.shristov92.sshmagic")
+
+    # Temporary keychain on CI so the distribution certificate can be imported.
+    setup_ci
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_P8_BASE64"),
+      is_key_content_base64: true,
+      in_house: false
+    )
+
+    import_certificate(
+      certificate_path: ENV.fetch("IOS_DIST_CERT_PATH"),
+      certificate_password: ENV.fetch("IOS_DIST_CERT_PASSWORD"),
+      keychain_name: ENV.fetch("MATCH_KEYCHAIN_NAME"),
+      keychain_password: ENV.fetch("MATCH_KEYCHAIN_PASSWORD", "")
+    )
+
+    # Downloads (or creates) the App Store provisioning profile for the bundle
+    # id via the App Store Connect API, so no profile secret is needed.
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: bundle_id,
+      team_id: team_id,
+      readonly: false
+    )
+    profile_name = lane_context[SharedValues::SIGH_NAME]
+
+    update_code_signing_settings(
+      path: File.join(ROOT, "ios/Runner.xcodeproj"),
+      use_automatic_signing: false,
+      team_id: team_id,
+      targets: ["Runner"],
+      bundle_identifier: bundle_id,
+      code_sign_identity: "Apple Distribution",
+      profile_name: profile_name
+    )
+
+    export_options_path = File.join(ROOT, "build/ExportOptions.plist")
+    FileUtils.mkdir_p(File.dirname(export_options_path))
+    File.write(export_options_path, Plist::Emit.dump({
+      "method" => "app-store-connect",
+      "teamID" => team_id,
+      "signingStyle" => "manual",
+      "provisioningProfiles" => { bundle_id => profile_name },
+      "uploadSymbols" => true
+    }))
+
+    # TestFlight needs a strictly increasing build number per version.
+    latest = latest_testflight_build_number(api_key: api_key, app_identifier: bundle_id, initial_build_number: 0)
+    build_number = [latest.to_i + 1, ENV.fetch("GITHUB_RUN_NUMBER", "0").to_i].max
+
+    sh("cd '#{ROOT}' && flutter build ipa --release --build-number=#{build_number} " \
+       "--export-options-plist='#{export_options_path}'")
+
+    ipa = Dir[File.join(ROOT, "build/ios/ipa/*.ipa")].first
+    UI.user_error!("No IPA produced") unless ipa
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ipa,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end

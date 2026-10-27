@@ -1,0 +1,26 @@
+name: sshmagic
+description: Mobile SSH client for iOS and Android with saved connections and tmux integration.
+publish_to: "none"
+
+# The build number (+N) is overridden in CI with the GitHub run number.
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dartssh2: ^2.12.0
+  xterm: ^4.0.0
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.2
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

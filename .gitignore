@@ -1,0 +1,29 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+.idea/
+.vscode/
+.DS_Store
+
+# Android signing (never commit)
+android/key.properties
+*.jks
+*.keystore
+
+# iOS / fastlane outputs
+*.ipa
+*.mobileprovision
+*.p12
+*.p8
+fastlane/report.xml
+fastlane/README.md
+fastlane/test_output/
+ios_export/
+vendor/bundle/
+.bundle/
